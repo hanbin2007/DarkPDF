@@ -23,6 +23,12 @@ final class PDFProcessor {
             var mediaBox = page.getBoxRect(.mediaBox)
             context.beginPage(mediaBox: &mediaBox)
 
+            // Fill the page background so transparent regions are inverted as well.
+            context.saveGState()
+            context.setFillColor(gray: 1, alpha: 1)
+            context.fill(mediaBox)
+            context.restoreGState()
+
             // Draw original page content to preserve vectors and text.
             context.drawPDFPage(page)
 
