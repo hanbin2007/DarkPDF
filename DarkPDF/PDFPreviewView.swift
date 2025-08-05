@@ -55,14 +55,16 @@ struct Representable: UIViewRepresentable {
 }
 #endif
 
+#if os(macOS)
 private extension NSColor {
     convenience init(_ color: Color) {
-        self.init(cgColor: color.cgColor!)!
+        self.init(cgColor: color.cgColor ?? NSColor.clear.cgColor)!
     }
 }
-
+#else
 private extension UIColor {
     convenience init(_ color: Color) {
         self.init(cgColor: color.cgColor!)
     }
 }
+#endif
