@@ -109,6 +109,10 @@ struct ContentView: View {
             var exportFilename = "inverted.pdf"
 
             for url in urls {
+                // Access security-scoped resources so files selected from outside the sandbox can be read
+                guard url.startAccessingSecurityScopedResource() else { continue }
+                defer { url.stopAccessingSecurityScopedResource() }
+
                 if let data = try? processor.convert(url: url) {
                     let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(url.deletingPathExtension().lastPathComponent + "_inverted.pdf")
                     try? data.write(to: tempURL)
