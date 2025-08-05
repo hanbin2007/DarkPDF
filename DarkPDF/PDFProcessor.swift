@@ -1,21 +1,43 @@
 import Foundation
 import PDFKit
+import CoreGraphics
 
-/// Handles PDF color conversion and exporting.
+/// Performs black and white inversion on PDF content while preserving vector data.
 final class PDFProcessor {
-    let theme: DarkTheme
+    /// Converts the PDF at the given URL by inverting all colors and returns the resulting PDF data.
+    /// - Parameter url: location of the source PDF
+    /// - Returns: Data of the processed PDF
+    func convert(url: URL) throws -> Data {
+        guard let input = CGPDFDocument(url as CFURL) else {
+            throw NSError(domain: "PDFProcessor", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unable to open PDF"])
+        }
 
-    init(theme: DarkTheme) {
-        self.theme = theme
-    }
+        let outData = NSMutableData()
+        guard let consumer = CGDataConsumer(data: outData as CFMutableData),
+              let context = CGContext(consumer: consumer, mediaBox: nil, nil) else {
+            throw NSError(domain: "PDFProcessor", code: -2, userInfo: [NSLocalizedDescriptionKey: "Unable to create context"])
+        }
 
-    /// Converts the given PDF to a themed variant. Currently acts as a placeholder
-    /// by duplicating the original file.
-    func convert(url: URL) throws -> URL {
-        let doc = PDFDocument(url: url)
-        // TODO: Replace with real color transformation logic.
-        let outputURL = url.deletingPathExtension().appendingPathExtension("_dark.pdf")
-        doc?.write(to: outputURL)
-        return outputURL
+        for index in 1...input.numberOfPages {
+            guard let page = input.page(at: index) else { continue }
+            var mediaBox = page.getBoxRect(.mediaBox)
+            context.beginPage(mediaBox: &mediaBox)
+
+            // Draw original page content to preserve vectors and text.
+            context.drawPDFPage(page)
+
+            // Overlay a white rectangle with difference blend mode to invert colors.
+            context.saveGState()
+            context.setBlendMode(.difference)
+            context.setFillColor(gray: 1, alpha: 1)
+            context.fill(mediaBox)
+            context.restoreGState()
+
+            context.endPage()
+        }
+
+        context.closePDF()
+
+        return outData as Data
     }
 }
