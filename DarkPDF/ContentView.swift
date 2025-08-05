@@ -1,11 +1,32 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Simple `FileDocument` wrapper so the processed PDF can be exported via SwiftUI's file exporter.
+struct ProcessedPDF: FileDocument {
+    static var readableContentTypes: [UTType] { [.pdf] }
+    var data: Data
+
+    init(data: Data = Data()) {
+        self.data = data
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        self.data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
+
 struct ContentView: View {
     @State private var pdfURLs: [URL] = []
     @State private var theme: DarkTheme = .darkGray
     @State private var isImporting = false
     @State private var processing = false
+    @State private var exportedDoc = ProcessedPDF()
+    @State private var exportName = "inverted.pdf"
+    @State private var isExporting = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -42,6 +63,7 @@ struct ContentView: View {
                 break
             }
         }
+        .fileExporter(isPresented: $isExporting, document: exportedDoc, contentType: .pdf, defaultFilename: exportName) { _ in }
     }
 
     private var controlBar: some View {
@@ -77,11 +99,33 @@ struct ContentView: View {
 
     private func processFiles() {
         processing = true
-        let processor = PDFProcessor(theme: theme)
-        for url in pdfURLs {
-            _ = try? processor.convert(url: url)
+        let urls = pdfURLs
+        DispatchQueue.global(qos: .userInitiated).async {
+            let processor = PDFProcessor()
+            var outputURLs: [URL] = []
+            var exportData: Data?
+            var exportFilename = "inverted.pdf"
+
+            for url in urls {
+                if let data = try? processor.convert(url: url) {
+                    let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(url.deletingPathExtension().lastPathComponent + "_inverted.pdf")
+                    try? data.write(to: tempURL)
+                    outputURLs.append(tempURL)
+                    exportData = data
+                    exportFilename = tempURL.lastPathComponent
+                }
+            }
+
+            DispatchQueue.main.async {
+                self.processing = false
+                self.pdfURLs = outputURLs
+                if let data = exportData {
+                    self.exportedDoc = ProcessedPDF(data: data)
+                    self.exportName = exportFilename
+                    self.isExporting = true
+                }
+            }
         }
-        processing = false
     }
 }
 

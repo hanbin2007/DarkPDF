@@ -4,10 +4,10 @@ import CoreGraphics
 
 /// Performs black and white inversion on PDF content while preserving vector data.
 final class PDFProcessor {
-    /// Converts the PDF at the given URL by inverting all colors and writes the result next to the original.
+    /// Converts the PDF at the given URL by inverting all colors and returns the resulting PDF data.
     /// - Parameter url: location of the source PDF
-    /// - Returns: URL of the processed PDF
-    func convert(url: URL) throws -> URL {
+    /// - Returns: Data of the processed PDF
+    func convert(url: URL) throws -> Data {
         guard let input = CGPDFDocument(url as CFURL) else {
             throw NSError(domain: "PDFProcessor", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unable to open PDF"])
         }
@@ -38,8 +38,6 @@ final class PDFProcessor {
 
         context.closePDF()
 
-        let outputURL = url.deletingPathExtension().appendingPathExtension("inverted.pdf")
-        try outData.write(to: outputURL, options: .atomic)
-        return outputURL
+        return outData as Data
     }
 }
