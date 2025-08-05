@@ -63,7 +63,9 @@ struct ContentView: View {
                 break
             }
         }
-        .fileExporter(isPresented: $isExporting, document: exportedDoc, contentType: .pdf, defaultFilename: exportName) { _ in }
+        .fileExporter(isPresented: $isExporting, document: exportedDoc, contentType: .pdf, defaultFilename: exportName) { _ in
+            isExporting = false
+        }
     }
 
     private var controlBar: some View {

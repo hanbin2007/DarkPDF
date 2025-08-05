@@ -33,6 +33,9 @@ struct Representable: NSViewRepresentable {
 
     func updateNSView(_ nsView: PDFView, context: Context) {
         nsView.backgroundColor = NSColor(theme.backgroundColor)
+        if nsView.document?.documentURL != url {
+            nsView.document = PDFDocument(url: url)
+        }
     }
 }
 #else
@@ -51,6 +54,9 @@ struct Representable: UIViewRepresentable {
 
     func updateUIView(_ uiView: PDFView, context: Context) {
         uiView.backgroundColor = UIColor(theme.backgroundColor)
+        if uiView.document?.documentURL != url {
+            uiView.document = PDFDocument(url: url)
+        }
     }
 }
 #endif
