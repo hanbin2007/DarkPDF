@@ -21,18 +21,18 @@ struct ProcessedPDF: FileDocument {
 
 struct ContentView: View {
     @State private var pdfURLs: [URL] = []
-    @State private var theme: DarkTheme = .darkGray
     @State private var isImporting = false
     @State private var processing = false
     @State private var exportedDoc = ProcessedPDF()
     @State private var exportName = "inverted.pdf"
     @State private var isExporting = false
+    @State private var includeAnnotations = true
 
     var body: some View {
         VStack(spacing: 0) {
             ZStack {
                 if let url = pdfURLs.first {
-                    PDFPreviewView(url: url, theme: theme)
+                    PDFPreviewView(url: url)
                 } else {
                     Text("Drag or import PDF files to begin")
                         .foregroundColor(.secondary)
@@ -78,12 +78,7 @@ struct ContentView: View {
                     Label("Add PDFs", systemImage: "plus")
                 }
 
-                Picker("Theme", selection: $theme) {
-                    ForEach(DarkTheme.allCases) { theme in
-                        Text(theme.rawValue).tag(theme)
-                    }
-                }
-                .pickerStyle(.menu)
+                Toggle("Include Annotations", isOn: $includeAnnotations)
 
                 Spacer()
 
@@ -112,7 +107,7 @@ struct ContentView: View {
                 guard url.startAccessingSecurityScopedResource() else { continue }
                 defer { url.stopAccessingSecurityScopedResource() }
 
-                if let data = try? processor.convert(url: url) {
+                if let data = try? processor.convert(url: url, includeAnnotations: includeAnnotations) {
                     let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(url.deletingPathExtension().lastPathComponent + "_inverted.pdf")
                     try? data.write(to: tempURL)
                     outputURLs.append(tempURL)
