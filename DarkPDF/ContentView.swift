@@ -21,6 +21,7 @@ struct ProcessedPDF: FileDocument {
 
 struct ContentView: View {
     @State private var pdfURLs: [URL] = []
+    @State private var originalURLs: [URL] = []
     @State private var isImporting = false
     @State private var processing = false
     @State private var exportedDoc = ProcessedPDF()
@@ -32,7 +33,7 @@ struct ContentView: View {
         VStack(spacing: 0) {
             ZStack {
                 if let url = pdfURLs.first {
-                    PDFPreviewView(url: url)
+                    PDFPreviewView(url: url, includeAnnotations: includeAnnotations)
                 } else {
                     Text("Drag or import PDF files to begin")
                         .foregroundColor(.secondary)
@@ -66,6 +67,10 @@ struct ContentView: View {
         .fileExporter(isPresented: $isExporting, document: exportedDoc, contentType: .pdf, defaultFilename: exportName) { _ in
             isExporting = false
         }
+        .onChange(of: includeAnnotations) { _ in
+            guard !originalURLs.isEmpty else { return }
+            processFiles(urls: originalURLs, replaceExisting: true)
+        }
     }
 
     private var controlBar: some View {
@@ -94,8 +99,9 @@ struct ContentView: View {
         .background(.thinMaterial)
     }
 
-    private func processFiles(urls: [URL]) {
+    private func processFiles(urls: [URL], replaceExisting: Bool = false) {
         processing = true
+        originalURLs = urls
         DispatchQueue.global(qos: .userInitiated).async {
             let processor = PDFProcessor()
             var outputURLs: [URL] = []
@@ -119,7 +125,11 @@ struct ContentView: View {
             DispatchQueue.main.async {
                 self.processing = false
                 if !outputURLs.isEmpty {
-                    self.pdfURLs.insert(contentsOf: outputURLs, at: 0)
+                    if replaceExisting {
+                        self.pdfURLs = outputURLs
+                    } else {
+                        self.pdfURLs.insert(contentsOf: outputURLs, at: 0)
+                    }
                 }
                 if let data = exportData {
                     self.exportedDoc = ProcessedPDF(data: data)
