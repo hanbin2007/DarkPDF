@@ -46,10 +46,12 @@ final class PDFProcessor {
             guard let page = document.page(at: index) else { continue }
             for annotation in page.annotations {
 #if os(macOS)
-                let color = annotation.color
+                let primary: PlatformColor? = annotation.color
 #else
-                guard let color = annotation.color else { continue }
+                let primary = annotation.color
 #endif
+                let candidate = primary ?? annotation.border?.color ?? annotation.interiorColor
+                guard let color = candidate else { continue }
                 let rgba = color.rgba
                 if !set.contains(rgba) {
                     set.insert(rgba)
@@ -75,12 +77,19 @@ final class PDFProcessor {
             guard let page = document.page(at: index) else { continue }
             for annotation in page.annotations {
 #if os(macOS)
-                let color = annotation.color
+                let primary: PlatformColor? = annotation.color
 #else
-                guard let color = annotation.color else { continue }
+                let primary = annotation.color
 #endif
-                if color.rgba == fromRGBA {
+                let borderColor = annotation.border?.color
+                let interiorColor = annotation.interiorColor
+                let matches = [primary, borderColor, interiorColor].contains { $0?.rgba == fromRGBA }
+                if matches {
                     annotation.color = toColor
+                    if let border = annotation.border {
+                        border.color = toColor
+                    }
+                    annotation.interiorColor = toColor
                 }
             }
         }

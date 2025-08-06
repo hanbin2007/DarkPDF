@@ -15,34 +15,40 @@ struct ColorReplacementView: View {
 
     var body: some View {
         VStack {
-            List(colors, id: \.self) { color in
-                HStack {
-                    Circle()
-                        .fill(color)
-                        .frame(width: 24, height: 24)
-                    Text(hexString(for: color))
-                    Spacer()
-                    if let selected, selected.cgColor == color.cgColor {
-                        Image(systemName: "checkmark")
+            if colors.isEmpty {
+                Text("No annotation colors detected")
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(colors, id: \.self) { color in
+                    HStack {
+                        Circle()
+                            .fill(color)
+                            .frame(width: 24, height: 24)
+                        Text(hexString(for: color))
+                        Spacer()
+                        if let selected, selected.cgColor == color.cgColor {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture { selected = color }
+                }
+
+                if selected != nil {
+                    ColorPicker("New Color", selection: $newColor)
+                        .padding(.vertical)
+                    Button("Replace") {
+                        if let original = selected {
+                            onReplace(original, newColor)
+                            dismiss()
+                        }
                     }
                 }
-                .contentShape(Rectangle())
-                .onTapGesture { selected = color }
-            }
 
-            if selected != nil {
-                ColorPicker("New Color", selection: $newColor)
-                    .padding(.vertical)
-                Button("Replace") {
-                    if let original = selected {
-                        onReplace(original, newColor)
-                        dismiss()
-                    }
-                }
+                Button("Cancel") { dismiss() }
+                    .padding(.top)
             }
-
-            Button("Cancel") { dismiss() }
-                .padding(.top)
         }
         .padding()
         .frame(minWidth: 320, minHeight: 400)

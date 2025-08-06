@@ -126,11 +126,16 @@ struct ContentView: View {
             var outputURLs: [URL] = []
             var exportData: Data?
             var exportFilename = "inverted.pdf"
+            var detectedColors: [PlatformColor] = []
 
-            for url in urls {
+            for (index, url) in urls.enumerated() {
                 // Access security-scoped resources so files selected from outside the sandbox can be read
                 guard url.startAccessingSecurityScopedResource() else { continue }
                 defer { url.stopAccessingSecurityScopedResource() }
+
+                if index == 0 {
+                    detectedColors = processor.annotationColors(url: url)
+                }
 
                 if let data = try? processor.convert(url: url, includeAnnotations: includeAnnotations) {
                     let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(url.deletingPathExtension().lastPathComponent + "_inverted.pdf")
@@ -149,9 +154,7 @@ struct ContentView: View {
                     } else {
                         self.pdfURLs.insert(contentsOf: outputURLs, at: 0)
                     }
-                    if let first = outputURLs.first {
-                        self.availableColors = processor.annotationColors(url: first).map { Color($0) }
-                    }
+                    self.availableColors = detectedColors.map { Color($0) }
                 }
                 if let data = exportData {
                     self.exportedDoc = ProcessedPDF(data: data)
@@ -162,11 +165,16 @@ struct ContentView: View {
     }
 
     private func detectColors() {
-        guard let url = pdfURLs.first else { return }
+        guard let url = originalURLs.first else { return }
         processing = true
         DispatchQueue.global(qos: .userInitiated).async {
             let processor = PDFProcessor()
+            guard url.startAccessingSecurityScopedResource() else {
+                DispatchQueue.main.async { self.processing = false }
+                return
+            }
             let colors = processor.annotationColors(url: url)
+            url.stopAccessingSecurityScopedResource()
             DispatchQueue.main.async {
                 self.availableColors = colors.map { Color($0) }
                 self.processing = false
@@ -176,10 +184,15 @@ struct ContentView: View {
     }
 
     private func replaceColor(original: Color, newColor: Color) {
-        guard let url = pdfURLs.first else { return }
+        guard let inputURL = originalURLs.first else { return }
         processing = true
         DispatchQueue.global(qos: .userInitiated).async {
             let processor = PDFProcessor()
+            guard inputURL.startAccessingSecurityScopedResource() else {
+                DispatchQueue.main.async { self.processing = false }
+                return
+            }
+            defer { inputURL.stopAccessingSecurityScopedResource() }
 #if os(macOS)
             let fromColor = NSColor(original)
             let toColor = NSColor(newColor)
@@ -187,18 +200,28 @@ struct ContentView: View {
             let fromColor = UIColor(original)
             let toColor = UIColor(newColor)
 #endif
-            if let data = try? processor.replaceAnnotations(url: url, fromColor: fromColor, toColor: toColor) {
-                let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pdf")
-                try? data.write(to: tempURL)
-                DispatchQueue.main.async {
-                    self.pdfURLs[0] = tempURL
-                    self.availableColors = processor.annotationColors(url: tempURL).map { Color($0) }
-                    self.exportedDoc = ProcessedPDF(data: data)
-                    self.exportName = tempURL.lastPathComponent
-                    self.processing = false
-                }
-            } else {
+            guard let modifiedData = try? processor.replaceAnnotations(url: inputURL, fromColor: fromColor, toColor: toColor) else {
                 DispatchQueue.main.async { self.processing = false }
+                return
+            }
+            let newOriginalURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pdf")
+            try? modifiedData.write(to: newOriginalURL)
+
+            guard let processedData = try? processor.convert(url: newOriginalURL, includeAnnotations: includeAnnotations) else {
+                DispatchQueue.main.async { self.processing = false }
+                return
+            }
+            let processedURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + "_inverted.pdf")
+            try? processedData.write(to: processedURL)
+            let detectedColors = processor.annotationColors(url: newOriginalURL)
+
+            DispatchQueue.main.async {
+                self.originalURLs[0] = newOriginalURL
+                self.pdfURLs[0] = processedURL
+                self.availableColors = detectedColors.map { Color($0) }
+                self.exportedDoc = ProcessedPDF(data: processedData)
+                self.exportName = processedURL.lastPathComponent
+                self.processing = false
             }
         }
     }
