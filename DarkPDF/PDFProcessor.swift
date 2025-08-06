@@ -45,7 +45,11 @@ final class PDFProcessor {
         for index in 0..<document.pageCount {
             guard let page = document.page(at: index) else { continue }
             for annotation in page.annotations {
+#if os(macOS)
+                let color = annotation.color
+#else
                 guard let color = annotation.color else { continue }
+#endif
                 let rgba = color.rgba
                 if !set.contains(rgba) {
                     set.insert(rgba)
@@ -70,7 +74,11 @@ final class PDFProcessor {
         for index in 0..<document.pageCount {
             guard let page = document.page(at: index) else { continue }
             for annotation in page.annotations {
+#if os(macOS)
+                let color = annotation.color
+#else
                 guard let color = annotation.color else { continue }
+#endif
                 if color.rgba == fromRGBA {
                     annotation.color = toColor
                 }
