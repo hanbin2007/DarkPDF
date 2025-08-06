@@ -5,12 +5,18 @@ import CoreGraphics
 /// Performs black and white inversion on PDF content while preserving vector data.
 final class PDFProcessor {
     /// Converts the PDF at the given URL by inverting all colors and returns the resulting PDF data.
-    /// - Parameter url: location of the source PDF
+    /// - Parameters:
+    ///   - url: location of the source PDF
+    ///   - includeAnnotations: whether to render PDF annotations such as handwriting
     /// - Returns: Data of the processed PDF
-    func convert(url: URL) throws -> Data {
-        guard let input = CGPDFDocument(url as CFURL) else {
+    func convert(url: URL, includeAnnotations: Bool = true) throws -> Data {
+        guard let input = CGPDFDocument(url as CFURL),
+              let pdfKitDoc = PDFDocument(url: url) else {
             throw NSError(domain: "PDFProcessor", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unable to open PDF"])
         }
+
+        // Determine whether the PDF has already been processed by DarkPDF.
+        let alreadyConverted = (pdfKitDoc.documentAttributes?["DarkPDFConverted"] as? String) == "true"
 
         let outData = NSMutableData()
         guard let consumer = CGDataConsumer(data: outData as CFMutableData),
@@ -23,7 +29,7 @@ final class PDFProcessor {
             var mediaBox = page.getBoxRect(.mediaBox)
             context.beginPage(mediaBox: &mediaBox)
 
-            // Fill the page background so transparent regions are inverted as well.
+            // Fill the page background so transparent regions are handled consistently.
             context.saveGState()
             context.setFillColor(gray: 1, alpha: 1)
             context.fill(mediaBox)
@@ -32,18 +38,38 @@ final class PDFProcessor {
             // Draw original page content to preserve vectors and text.
             context.drawPDFPage(page)
 
-            // Overlay a white rectangle with difference blend mode to invert colors.
-            context.saveGState()
-            context.setBlendMode(.difference)
-            context.setFillColor(gray: 1, alpha: 1)
-            context.fill(mediaBox)
-            context.restoreGState()
+            // Draw annotations like handwriting so they are preserved.
+            if includeAnnotations, let kitPage = pdfKitDoc.page(at: index - 1) {
+                for annotation in kitPage.annotations {
+                    annotation.draw(with: .mediaBox, in: context)
+                }
+            }
+
+            // Only invert colors if the document hasn't been processed before.
+            if !alreadyConverted {
+                context.saveGState()
+                context.setBlendMode(.difference)
+                context.setFillColor(gray: 1, alpha: 1)
+                context.fill(mediaBox)
+                context.restoreGState()
+            }
 
             context.endPage()
         }
 
         context.closePDF()
 
-        return outData as Data
+        // Mark the document so future conversions know it has already been processed.
+        var data = outData as Data
+        if let outputDoc = PDFDocument(data: data) {
+            var attrs = outputDoc.documentAttributes ?? [:]
+            attrs["DarkPDFConverted"] = "true"
+            outputDoc.documentAttributes = attrs
+            if let updated = outputDoc.dataRepresentation() {
+                data = updated
+            }
+        }
+
+        return data
     }
 }
