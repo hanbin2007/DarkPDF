@@ -1,5 +1,10 @@
 import SwiftUI
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 /// Simple `FileDocument` wrapper so the processed PDF can be exported via SwiftUI's file exporter.
 struct ProcessedPDF: FileDocument {
@@ -28,6 +33,8 @@ struct ContentView: View {
     @State private var exportName = "inverted.pdf"
     @State private var isExporting = false
     @State private var includeAnnotations = true
+    @State private var availableColors: [Color] = []
+    @State private var showColorSheet = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -88,6 +95,13 @@ struct ContentView: View {
                 Spacer()
 
                 Button {
+                    detectColors()
+                } label: {
+                    Label("Replace Color", systemImage: "paintpalette")
+                }
+                .disabled(pdfURLs.isEmpty || processing)
+
+                Button {
                     isExporting = true
                 } label: {
                     Label("Export", systemImage: "square.and.arrow.up")
@@ -97,6 +111,11 @@ struct ContentView: View {
             .padding()
         }
         .background(.thinMaterial)
+        .sheet(isPresented: $showColorSheet) {
+            ColorReplacementView(colors: availableColors) { original, replacement in
+                replaceColor(original: original, newColor: replacement)
+            }
+        }
     }
 
     private func processFiles(urls: [URL], replaceExisting: Bool = false) {
@@ -130,11 +149,56 @@ struct ContentView: View {
                     } else {
                         self.pdfURLs.insert(contentsOf: outputURLs, at: 0)
                     }
+                    if let first = outputURLs.first {
+                        self.availableColors = processor.annotationColors(url: first).map { Color($0) }
+                    }
                 }
                 if let data = exportData {
                     self.exportedDoc = ProcessedPDF(data: data)
                     self.exportName = exportFilename
                 }
+            }
+        }
+    }
+
+    private func detectColors() {
+        guard let url = pdfURLs.first else { return }
+        processing = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let processor = PDFProcessor()
+            let colors = processor.annotationColors(url: url)
+            DispatchQueue.main.async {
+                self.availableColors = colors.map { Color($0) }
+                self.processing = false
+                self.showColorSheet = true
+            }
+        }
+    }
+
+    private func replaceColor(original: Color, newColor: Color) {
+        guard let url = pdfURLs.first else { return }
+        processing = true
+        DispatchQueue.global(qos: .userInitiated).async {
+            let processor = PDFProcessor()
+#if os(macOS)
+            let fromColor = NSColor(original)
+            let toColor = NSColor(newColor)
+#else
+            let fromColor = UIColor(original)
+            let toColor = UIColor(newColor)
+#endif
+            if let data = try? processor.replaceAnnotations(url: url, fromColor: fromColor, toColor: toColor) {
+                let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".pdf")
+                try? data.write(to: tempURL)
+                DispatchQueue.main.async {
+                    self.pdfURLs[0] = tempURL
+                    self.availableColors = processor.annotationColors(url: tempURL).map { Color($0) }
+                    self.exportedDoc = ProcessedPDF(data: data)
+                    self.exportName = tempURL.lastPathComponent
+                    self.processing = false
+                }
+            } else {
+                DispatchQueue.main.async { self.processing = false }
             }
         }
     }
