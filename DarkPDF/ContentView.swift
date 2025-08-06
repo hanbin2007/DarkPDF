@@ -45,7 +45,7 @@ struct ContentView: View {
                     _ = provider.loadObject(ofClass: URL.self) { url, _ in
                         if let url = url, url.pathExtension.lowercased() == "pdf" {
                             DispatchQueue.main.async {
-                                self.pdfURLs.append(url)
+                                self.processFiles(urls: [url])
                             }
                         }
                     }
@@ -58,7 +58,7 @@ struct ContentView: View {
         .fileImporter(isPresented: $isImporting, allowedContentTypes: [.pdf], allowsMultipleSelection: true) { result in
             switch result {
             case .success(let urls):
-                pdfURLs.append(contentsOf: urls)
+                processFiles(urls: urls)
             case .failure:
                 break
             }
@@ -88,20 +88,19 @@ struct ContentView: View {
                 Spacer()
 
                 Button {
-                    processFiles()
+                    isExporting = true
                 } label: {
-                    Label("Convert", systemImage: "wand.and.stars")
+                    Label("Export", systemImage: "square.and.arrow.up")
                 }
-                .disabled(pdfURLs.isEmpty || processing)
+                .disabled(exportedDoc.data.isEmpty || processing)
             }
             .padding()
         }
         .background(.thinMaterial)
     }
 
-    private func processFiles() {
+    private func processFiles(urls: [URL]) {
         processing = true
-        let urls = pdfURLs
         DispatchQueue.global(qos: .userInitiated).async {
             let processor = PDFProcessor()
             var outputURLs: [URL] = []
@@ -124,11 +123,12 @@ struct ContentView: View {
 
             DispatchQueue.main.async {
                 self.processing = false
-                self.pdfURLs = outputURLs
+                if !outputURLs.isEmpty {
+                    self.pdfURLs.insert(contentsOf: outputURLs, at: 0)
+                }
                 if let data = exportData {
                     self.exportedDoc = ProcessedPDF(data: data)
                     self.exportName = exportFilename
-                    self.isExporting = true
                 }
             }
         }
