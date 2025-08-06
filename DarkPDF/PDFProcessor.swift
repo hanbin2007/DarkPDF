@@ -50,12 +50,14 @@ final class PDFProcessor {
 #else
                 let primary = annotation.color
 #endif
-                let candidate = primary ?? annotation.border?.color ?? annotation.interiorColor
-                guard let color = candidate else { continue }
-                let rgba = color.rgba
-                if !set.contains(rgba) {
-                    set.insert(rgba)
-                    colors.append(color)
+                let interior = annotation.interiorColor
+                for candidate in [primary, interior] {
+                    guard let color = candidate else { continue }
+                    let rgba = color.rgba
+                    if !set.contains(rgba) {
+                        set.insert(rgba)
+                        colors.append(color)
+                    }
                 }
             }
         }
@@ -81,14 +83,10 @@ final class PDFProcessor {
 #else
                 let primary = annotation.color
 #endif
-                let borderColor = annotation.border?.color
                 let interiorColor = annotation.interiorColor
-                let matches = [primary, borderColor, interiorColor].contains { $0?.rgba == fromRGBA }
+                let matches = [primary, interiorColor].contains { $0?.rgba == fromRGBA }
                 if matches {
                     annotation.color = toColor
-                    if let border = annotation.border {
-                        border.color = toColor
-                    }
                     annotation.interiorColor = toColor
                 }
             }
